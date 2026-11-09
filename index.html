@@ -14,15 +14,23 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Арарат">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
+<script>
+  // Применяем сохранённую тему до отрисовки, чтобы не было вспышки другой темы
+  try { const t = localStorage.getItem('ararat-theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch {}
+</script>
 <style>
   :root {
     --bg: #f4f1ec; --card: #ffffff; --text: #1d1b19; --muted: #6f6a63; --line: #e3ddd4;
     --yes: #2f8f5b; --maybe: #c98a16; --no: #b9483d; --night: #c9c5be; --tab: #e9e4dc;
   }
+  /* Тёмная тема: по системной настройке, если пользователь не выбрал светлую, или явно выбранная */
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #15171b; --card: #1f2228; --text: #ece9e4; --muted: #9a958e; --line: #2e323a;
-      --yes: #4cc187; --maybe: #e6ad3c; --no: #e2685c; --night: #3a3e47; --tab: #262a31; }
+    :root:not([data-theme="light"]) { --bg: #15171b; --card: #1f2228; --text: #ece9e4; --muted: #9a958e; --line: #2e323a;
+      --yes: #4cc187; --maybe: #e6ad3c; --no: #e2685c; --night: #3a3e47; --tab: #262a31; color-scheme: dark; }
   }
+  :root[data-theme="dark"] { --bg: #15171b; --card: #1f2228; --text: #ece9e4; --muted: #9a958e; --line: #2e323a;
+    --yes: #4cc187; --maybe: #e6ad3c; --no: #e2685c; --night: #3a3e47; --tab: #262a31; color-scheme: dark; }
+  :root[data-theme="light"] { color-scheme: light; }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text);
     font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
@@ -31,6 +39,22 @@
   h1 { font-size: 15px; font-weight: 600; color: var(--muted); margin: 0; letter-spacing: .02em; }
   .install { border: 1px solid var(--line); background: var(--card); color: var(--text); font: inherit; font-size: 13px;
     font-weight: 600; padding: 6px 12px; border-radius: 999px; cursor: pointer; }
+  .header-actions { display: flex; align-items: center; gap: 10px; }
+  .theme-switch { position: relative; width: 56px; height: 30px; flex: 0 0 auto; border: 1px solid var(--line);
+    border-radius: 999px; background: var(--tab); cursor: pointer; padding: 0; }
+  .theme-switch:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+  .theme-switch .icon { position: absolute; top: 50%; width: 14px; height: 14px; transform: translateY(-50%);
+    color: var(--muted); pointer-events: none; }
+  .theme-switch .sun { left: 7px; } .theme-switch .moon { right: 7px; }
+  .theme-switch .knob { position: absolute; top: 2px; left: 2px; width: 24px; height: 24px; border-radius: 50%;
+    background: var(--card); box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .2s ease;
+    display: grid; place-items: center; color: var(--text); }
+  .theme-switch .knob svg { width: 14px; height: 14px; }
+  .theme-switch[aria-checked="true"] .knob { transform: translateX(26px); }
+  .theme-switch .knob .k-moon { display: none; }
+  .theme-switch[aria-checked="true"] .knob .k-sun { display: none; }
+  .theme-switch[aria-checked="true"] .knob .k-moon { display: block; }
+  @media (prefers-reduced-motion: reduce) { .theme-switch .knob { transition: none; } }
   .status { font-size: 13px; color: var(--maybe); background: var(--card); border: 1px solid var(--line);
     border-radius: 12px; padding: 10px 14px; margin-bottom: 12px; }
   h2 { font-size: 16px; margin: 0 0 12px; }
@@ -91,7 +115,17 @@
 <main>
   <header>
     <h1>АРАРАТ ИЗ ЕРЕВАНА</h1>
-    <button class="install" id="install" hidden>Установить</button>
+    <div class="header-actions">
+      <button class="install" id="install" hidden>Установить</button>
+      <button class="theme-switch" id="theme" role="switch" aria-checked="false" aria-label="Тёмная тема" title="Тёмная тема">
+        <svg class="icon sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+        <span class="knob">
+          <svg class="k-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+          <svg class="k-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+        </span>
+      </button>
+    </div>
   </header>
   <div class="status" id="status" hidden></div>
 
@@ -363,6 +397,33 @@ function selectTab(name) {
   });
 }
 tabs.forEach(b => b.addEventListener('click', () => selectTab(b.dataset.tab)));
+
+// Тема: по умолчанию системная; выбор в переключателе запоминается
+const THEME_KEY = 'ararat-theme';
+const THEME_COLORS = { light: '#f4f1ec', dark: '#15171b' };
+const themeBtn = document.getElementById('theme');
+const systemDark = matchMedia('(prefers-color-scheme: dark)');
+const currentTheme = () => document.documentElement.dataset.theme || (systemDark.matches ? 'dark' : 'light');
+function syncThemeUi() {
+  const dark = currentTheme() === 'dark';
+  themeBtn.setAttribute('aria-checked', dark);
+  const label = dark ? 'Светлая тема' : 'Тёмная тема';
+  themeBtn.setAttribute('aria-label', label);
+  themeBtn.title = label;
+  document.querySelectorAll('meta[name="theme-color"]').forEach(m => {
+    m.content = document.documentElement.dataset.theme
+      ? THEME_COLORS[currentTheme()]
+      : THEME_COLORS[m.media.includes('dark') ? 'dark' : 'light'];
+  });
+}
+themeBtn.addEventListener('click', () => {
+  const next = currentTheme() === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem(THEME_KEY, next); } catch {}
+  syncThemeUi();
+});
+systemDark.addEventListener('change', syncThemeUi);
+syncThemeUi();
 
 // Загрузка и обновление
 let loadedAt = 0;
