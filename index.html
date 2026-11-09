@@ -436,7 +436,7 @@ function render(hours) {
 
 // Аналитика: GoatCounter (без cookies). Пустой код — аналитика выключена.
 // localhost GoatCounter сам не считает, так что локальная разработка статистику не портит.
-const GOATCOUNTER_CODE = '';
+const GOATCOUNTER_CODE = 'nikita-kolosov';
 const gcQueue = [];
 function gcSend(opts) {
   if (window.goatcounter && window.goatcounter.count) window.goatcounter.count(opts);
