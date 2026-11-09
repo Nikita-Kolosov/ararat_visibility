@@ -315,6 +315,7 @@ document.addEventListener('click', e => {
     closeTips(btn);
     btn.setAttribute('aria-expanded', open);
     document.getElementById(btn.getAttribute('aria-controls')).hidden = !open;
+    if (open) track('info-aod', 'Открыли пояснение про AOD');
   } else if (!e.target.closest('.tip')) {
     closeTips();
   }
@@ -433,6 +434,34 @@ function render(hours) {
   document.getElementById('panel-week').innerHTML = renderWeek(byDay, key, today, tomorrow);
 }
 
+// Аналитика: GoatCounter (без cookies). Пустой код — аналитика выключена.
+// localhost GoatCounter сам не считает, так что локальная разработка статистику не портит.
+const GOATCOUNTER_CODE = '';
+const gcQueue = [];
+function gcSend(opts) {
+  if (window.goatcounter && window.goatcounter.count) window.goatcounter.count(opts);
+  else gcQueue.push(opts);
+}
+// Событие: открытие вкладки, установка и т.п. Видно в GoatCounter отдельной строкой.
+function track(name, title) {
+  if (GOATCOUNTER_CODE) gcSend({ path: name, title: title || name, event: true });
+}
+if (GOATCOUNTER_CODE) {
+  window.goatcounter = { no_onload: true };
+  const s = document.createElement('script');
+  s.async = true;
+  s.src = 'https://gc.zgo.at/count.js';
+  s.dataset.goatcounter = `https://${GOATCOUNTER_CODE}.goatcounter.com/count`;
+  s.onload = () => {
+    window.goatcounter.count({ path: location.pathname });
+    gcQueue.splice(0).forEach(o => window.goatcounter.count(o));
+  };
+  document.head.appendChild(s);
+  // Запуск установленного приложения с рабочего экрана (Android/десктоп и iOS)
+  if (matchMedia('(display-mode: standalone)').matches || navigator.standalone)
+    track('launch-pwa', 'Запуск установленного приложения');
+}
+
 // Табы
 const tabs = [...document.querySelectorAll('[role=tab]')];
 function selectTab(name) {
@@ -442,7 +471,11 @@ function selectTab(name) {
     document.getElementById('panel-' + b.dataset.tab).hidden = !on;
   });
 }
-tabs.forEach(b => b.addEventListener('click', () => selectTab(b.dataset.tab)));
+const TAB_TITLES = { today: 'Вкладка «Сегодня»', tomorrow: 'Вкладка «Завтра»', week: 'Вкладка «Неделя»' };
+tabs.forEach(b => b.addEventListener('click', () => {
+  if (b.getAttribute('aria-selected') !== 'true') track('tab-' + b.dataset.tab, TAB_TITLES[b.dataset.tab]);
+  selectTab(b.dataset.tab);
+}));
 
 // Тема: по умолчанию системная; выбор в переключателе запоминается
 const THEME_KEY = 'ararat-theme';
@@ -467,6 +500,7 @@ themeBtn.addEventListener('click', () => {
   document.documentElement.dataset.theme = next;
   try { localStorage.setItem(THEME_KEY, next); } catch {}
   syncThemeUi();
+  track('theme-' + next, next === 'dark' ? 'Включили тёмную тему' : 'Включили светлую тему');
 });
 systemDark.addEventListener('change', syncThemeUi);
 syncThemeUi();
@@ -515,7 +549,10 @@ installBtn.addEventListener('click', async () => {
   installPrompt = null;
   installBtn.hidden = true;
 });
-window.addEventListener('appinstalled', () => { installBtn.hidden = true; });
+window.addEventListener('appinstalled', () => {
+  installBtn.hidden = true;
+  track('installed', 'Установили приложение');
+});
 </script>
 </body>
 </html>
