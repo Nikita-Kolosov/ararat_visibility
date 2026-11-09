@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Видно ли Арарат</title>
+<meta name="description" content="Прогноз видимости Арарата из Еревана на сегодня, завтра и неделю">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="theme-color" content="#f4f1ec" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#15171b" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Арарат">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<style>
+  :root {
+    --bg: #f4f1ec; --card: #ffffff; --text: #1d1b19; --muted: #6f6a63; --line: #e3ddd4;
+    --yes: #2f8f5b; --maybe: #c98a16; --no: #b9483d; --night: #c9c5be; --tab: #e9e4dc;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #15171b; --card: #1f2228; --text: #ece9e4; --muted: #9a958e; --line: #2e323a;
+      --yes: #4cc187; --maybe: #e6ad3c; --no: #e2685c; --night: #3a3e47; --tab: #262a31; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: max(24px, env(safe-area-inset-top)) 16px 48px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  h1 { font-size: 15px; font-weight: 600; color: var(--muted); margin: 0; letter-spacing: .02em; }
+  .install { border: 1px solid var(--line); background: var(--card); color: var(--text); font: inherit; font-size: 13px;
+    font-weight: 600; padding: 6px 12px; border-radius: 999px; cursor: pointer; }
+  .status { font-size: 13px; color: var(--maybe); background: var(--card); border: 1px solid var(--line);
+    border-radius: 12px; padding: 10px 14px; margin-bottom: 12px; }
+  h2 { font-size: 16px; margin: 0 0 12px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 20px; margin-bottom: 16px; }
+
+  .tabs { display: flex; gap: 4px; background: var(--tab); padding: 4px; border-radius: 12px; margin-bottom: 16px; }
+  .tabs button { flex: 1; border: 0; background: transparent; color: var(--muted); font: inherit; font-weight: 600;
+    padding: 9px 8px; border-radius: 9px; cursor: pointer; }
+  .tabs button[aria-selected="true"] { background: var(--card); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .tabs button:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
+
+  .eyebrow { font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  .verdict { font-size: clamp(28px, 7vw, 44px); font-weight: 700; margin: 0; line-height: 1.15; }
+  .sub { color: var(--muted); margin-top: 6px; }
+  .yes { color: var(--yes); } .maybe { color: var(--maybe); } .no { color: var(--no); } .night { color: var(--muted); }
+  .factors { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-top: 16px; }
+  .factor { border-top: 1px solid var(--line); padding-top: 10px; }
+  .factor b { display: block; font-size: 20px; }
+  .factor span { color: var(--muted); font-size: 13px; }
+  .factors-cap { font-size: 12px; color: var(--muted); margin-top: 10px; }
+  .hint { font-size: 13px; color: var(--muted); margin: -6px 0 14px; }
+  .warn { color: var(--maybe); }
+
+  .strip { display: grid; grid-template-columns: repeat(16, 1fr); gap: 3px; }
+  .hour { text-align: center; font-size: 10px; color: var(--muted); min-width: 0; }
+  .bar { height: 26px; border-radius: 5px; margin-bottom: 2px; }
+  .hour.now .bar { outline: 2px solid var(--text); outline-offset: 1px; }
+  .hour.past { opacity: .35; }
+  @media (max-width: 420px) { .hour:nth-child(odd) .lbl { visibility: hidden; } }
+
+  .rows { margin-top: 16px; }
+  .row { display: grid; grid-template-columns: 52px 12px 1fr auto; align-items: center; gap: 10px;
+    padding: 8px 0; border-top: 1px solid var(--line); font-size: 14px; }
+  .row.past { opacity: .45; }
+  .row.now { font-weight: 600; }
+  .row .t { font-variant-numeric: tabular-nums; color: var(--muted); }
+  .row .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .row .meta { font-size: 12px; color: var(--muted); text-align: right; white-space: nowrap; }
+  @media (max-width: 420px) { .row { grid-template-columns: 44px 12px 1fr; } .row .meta { display: none; } }
+
+  .day { padding: 14px 0; border-top: 1px solid var(--line); }
+  .day:first-of-type { border-top: 0; padding-top: 0; }
+  .day-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+  .day-name { font-weight: 600; }
+  .day-name small { font-weight: 400; color: var(--muted); margin-left: 6px; }
+  .badge { font-size: 13px; font-weight: 600; padding: 3px 10px; border-radius: 999px; color: #fff; white-space: nowrap; }
+  .badge.yes { background: var(--yes); } .badge.maybe { background: var(--maybe); } .badge.no { background: var(--no); }
+  .day-text { font-size: 14px; color: var(--muted); margin-top: 6px; }
+
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin-top: 12px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+  .note { font-size: 13px; color: var(--muted); }
+  .err { color: var(--no); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>АРАРАТ ИЗ ЕРЕВАНА</h1>
+    <button class="install" id="install" hidden>Установить</button>
+  </header>
+  <div class="status" id="status" hidden></div>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="today" aria-selected="true">Сегодня</button>
+    <button role="tab" data-tab="tomorrow" aria-selected="false">Завтра</button>
+    <button role="tab" data-tab="week" aria-selected="false">Неделя</button>
+  </nav>
+
+  <div id="panel-today" role="tabpanel"><section class="card"><p class="verdict">Загружаю прогноз…</p></section></div>
+  <div id="panel-tomorrow" role="tabpanel" hidden></div>
+  <div id="panel-week" role="tabpanel" hidden></div>
+
+  <p class="note">Оценка строится по прогнозу <a href="https://open-meteo.com/" target="_blank" rel="noopener" style="color:inherit">Open-Meteo</a> (CC BY 4.0): облачность над вершиной и по пути к ней, видимость, влажность и аэрозоли (дымка, пыль) над Ереваном. Это прогноз, а не снимок.</p>
+</main>
+
+<script>
+// Точки: вершина, середина пути, Ереван
+const POINTS = [
+  { name: 'summit',  lat: 39.702, lon: 44.299 },
+  { name: 'path',    lat: 39.94,  lon: 44.40 },
+  { name: 'yerevan', lat: 40.18,  lon: 44.51 },
+];
+const TZ = 'Asia/Yerevan';
+const DAYS = 7;
+const FIRST_HOUR = 5, LAST_HOUR = 20;
+
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const hourOf = t => +t.slice(11, 13);
+const fmt = (v, d = 0) => v == null ? '—' : v.toFixed(d);
+
+async function getJson(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+const CACHE_KEY = 'ararat-forecast';
+
+async function fetchForecast() {
+  const lats = POINTS.map(p => p.lat).join(','), lons = POINTS.map(p => p.lon).join(',');
+  const tz = encodeURIComponent(TZ);
+  const [w, a] = await Promise.all([
+    getJson(`https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}` +
+      `&hourly=cloud_cover_low,cloud_cover_mid,visibility,relative_humidity_2m,is_day` +
+      `&timezone=${tz}&forecast_days=${DAYS}`),
+    // аэрозоли есть только на ~4–5 дней вперёд; если API недоступен — живём без них
+    getJson(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=40.18&longitude=44.51` +
+      `&hourly=aerosol_optical_depth&timezone=${tz}&forecast_days=${DAYS}`).catch(() => null),
+  ]);
+  return { w, a, at: Date.now() };
+}
+
+// Сеть, а без неё — последний удачный прогноз из localStorage
+async function load() {
+  try {
+    const data = await fetchForecast();
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify(data)); } catch {}
+    return { ...data, stale: false };
+  } catch (e) {
+    let cached = null;
+    try { cached = JSON.parse(localStorage.getItem(CACHE_KEY)); } catch {}
+    if (!cached) throw e;
+    return { ...cached, stale: true };
+  }
+}
+
+function toHours({ w, a }) {
+  const [summit, path, yerevan] = w.map(x => x.hourly);
+  const aodByTime = new Map();
+  if (a) a.hourly.time.forEach((t, i) => aodByTime.set(t, a.hourly.aerosol_optical_depth[i]));
+
+  return summit.time.map((t, i) => {
+    const h = {
+      time: t,
+      day: yerevan.is_day[i] === 1,
+      summitCloud: Math.max(summit.cloud_cover_mid[i], summit.cloud_cover_low[i] * 0.8),
+      pathCloud: Math.max(path.cloud_cover_low[i], yerevan.cloud_cover_low[i]),
+      vis: yerevan.visibility[i],
+      rh: yerevan.relative_humidity_2m[i],
+      aod: aodByTime.get(t) ?? null,
+    };
+    return { ...h, ...score(h) };
+  });
+}
+
+// Грубая эвристика: вероятность увидеть гору 0..1
+function score(h) {
+  if (!h.day) return { p: 0, cls: 'night', label: 'Темно', reason: 'темно' };
+  const clouds = clamp(Math.max(h.summitCloud, h.pathCloud) / 100);
+  const hazeAod = h.aod == null ? 0 : clamp((h.aod - 0.12) / 0.4);
+  const hazeVis = h.vis == null ? 0 : clamp((20000 - h.vis) / 15000);
+  const hazeRh = clamp((h.rh - 75) / 25) * 0.5;
+  const haze = Math.max(hazeAod, hazeVis, hazeRh);
+  const p = (1 - clouds) * (1 - haze * 0.85);
+  let reason;
+  if (clouds > 0.6) reason = 'вершина в облаках';
+  else if (haze > 0.5) reason = 'сильная дымка';
+  else if (clouds > 0.3) reason = 'облака частично закрывают';
+  else if (haze > 0.25) reason = 'лёгкая дымка';
+  else reason = 'ясно';
+  if (p >= 0.6) return { p, cls: 'yes', label: 'Видно', reason };
+  if (p >= 0.3) return { p, cls: 'maybe', label: 'Частично', reason };
+  return { p, cls: 'no', label: 'Не видно', reason };
+}
+
+const nowKey = () => {
+  const s = new Intl.DateTimeFormat('sv-SE', { timeZone: TZ, year: 'numeric', month: '2-digit',
+    day: '2-digit', hour: '2-digit', hourCycle: 'h23' }).format(new Date());
+  return s.replace(' ', 'T').slice(0, 13) + ':00';
+};
+
+// Склеивает подряд идущие часы в интервалы: [8,9,10,14] -> "8–11, 14–15"
+function ranges(hs) {
+  const out = [];
+  hs.forEach(h => {
+    const x = hourOf(h.time), last = out[out.length - 1];
+    if (last && last[1] === x) last[1] = x + 1; else out.push([x, x + 1]);
+  });
+  return out.map(([a, b]) => `${a}–${b}`).join(', ');
+}
+
+// from — с какого часа учитывать (для сегодня — с текущего)
+function summarizeDay(hs, from) {
+  const daylight = hs.filter(h => h.day);
+  const pool = daylight.filter(h => h.time >= from);
+  const yes = pool.filter(h => h.cls === 'yes');
+  const maybe = pool.filter(h => h.cls === 'maybe');
+  const best = [...pool].sort((a, b) => b.p - a.p)[0];
+  const noAq = daylight.length > 0 && daylight.every(h => h.aod == null);
+  let cls, label, text;
+  if (yes.length >= 3) { cls = 'yes'; label = 'Хороший день'; }
+  else if (yes.length || maybe.length >= 3) { cls = 'maybe'; label = 'Есть шанс'; }
+  else { cls = 'no'; label = 'Скорее не видно'; }
+  if (yes.length) text = `Видно: ${ranges(yes)}`;
+  else if (maybe.length) text = `Частично: ${ranges(maybe)}`;
+  else text = best ? `Весь день: ${best.reason}` : 'Светлых часов больше нет';
+  if (yes.length && maybe.length) text += ` · частично: ${ranges(maybe)}`;
+  return { cls, label, text, noAq, best, empty: !pool.length };
+}
+
+function dayTitle(d, today, tomorrow, withDate = true) {
+  const date = new Date(d + 'T12:00');
+  const wd = date.toLocaleDateString('ru-RU', { weekday: 'long' });
+  const dm = date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+  const name = d === today ? 'Сегодня' : d === tomorrow ? 'Завтра' : wd[0].toUpperCase() + wd.slice(1);
+  return withDate ? `${name}<small>${dm}</small>` : `${name}, ${dm}`;
+}
+
+function factorsHtml(h, caption) {
+  return `
+    <div class="factors">
+      <div class="factor"><b>${fmt(h.summitCloud)}%</b><span>облака у вершины</span></div>
+      <div class="factor"><b>${fmt(h.pathCloud)}%</b><span>низкие облака по пути</span></div>
+      <div class="factor"><b>${fmt(h.aod, 2)}</b><span>аэрозоли (AOD)</span></div>
+      <div class="factor"><b>${h.vis == null ? '—' : (h.vis / 1000).toFixed(0) + ' км'}</b><span>видимость в Ереване</span></div>
+    </div>
+    ${caption ? `<div class="factors-cap">${caption}</div>` : ''}`;
+}
+
+function stripHtml(hs, key) {
+  return `<div class="strip">${hs.filter(h => hourOf(h.time) >= FIRST_HOUR && hourOf(h.time) <= LAST_HOUR).map(h => `
+    <div class="hour ${h.time === key ? 'now' : ''} ${h.time < key ? 'past' : ''}"
+         title="${hourOf(h.time)}:00 — ${h.label}${h.day ? ': ' + h.reason : ''}">
+      <div class="bar" style="background:var(--${h.cls})"></div><span class="lbl">${hourOf(h.time)}</span>
+    </div>`).join('')}
+  </div>`;
+}
+
+function rowsHtml(hs, key) {
+  return `<div class="rows">${hs.filter(h => h.day).map(h => `
+    <div class="row ${h.time === key ? 'now' : ''} ${h.time < key ? 'past' : ''}">
+      <span class="t">${h.time.slice(11, 16)}</span>
+      <span class="dot" style="background:var(--${h.cls})"></span>
+      <span>${h.label} <span class="${h.cls}" style="font-weight:400">· ${h.reason}</span></span>
+      <span class="meta">облака ${fmt(Math.max(h.summitCloud, h.pathCloud))}% · AOD ${fmt(h.aod, 2)}</span>
+    </div>`).join('')}
+  </div>`;
+}
+
+const LEGEND = `
+  <div class="legend">
+    <span><i style="background:var(--yes)"></i>видно</span>
+    <span><i style="background:var(--maybe)"></i>частично / дымка</span>
+    <span><i style="background:var(--no)"></i>не видно</span>
+    <span><i style="background:var(--night)"></i>темно</span>
+  </div>`;
+
+function renderToday(hs, key, today, tomorrow) {
+  const cur = hs.find(h => h.time === key) ?? hs[0];
+  const s = summarizeDay(hs, key);
+  let sub = cur.day ? `Сейчас ${cur.reason}.` : 'Сейчас темно — гору не видно.';
+  if (s.best && s.best.time !== cur.time && s.best.p > cur.p + 0.1)
+    sub += ` Лучшее время сегодня — ${hourOf(s.best.time)}:00 (${s.best.label.toLowerCase()}).`;
+  else if (s.empty) sub += ' Светлых часов сегодня больше нет — загляни во вкладку «Завтра».';
+  return `
+    <section class="card">
+      <div class="eyebrow">${dayTitle(today, today, tomorrow, false)}, сейчас ${key.slice(11, 16)}</div>
+      <p class="verdict ${cur.cls}">${cur.label}</p>
+      <div class="sub">${sub}</div>
+      ${factorsHtml(cur)}
+    </section>
+    <section class="card">
+      <h2>По часам</h2>
+      ${stripHtml(hs, key)}
+      ${rowsHtml(hs, key)}
+      ${LEGEND}
+    </section>`;
+}
+
+function renderTomorrow(hs, today, tomorrow) {
+  if (!hs) return `<section class="card"><p class="sub">Нет прогноза на завтра.</p></section>`;
+  const s = summarizeDay(hs, '');
+  return `
+    <section class="card">
+      <div class="eyebrow">${dayTitle(tomorrow, today, tomorrow, false)}</div>
+      <p class="verdict ${s.cls}">${s.label}</p>
+      <div class="sub">${s.text}${s.best ? `. Лучшее время — ${hourOf(s.best.time)}:00.` : ''}</div>
+      ${s.best ? factorsHtml(s.best, `Показатели в лучший час, ${s.best.time.slice(11, 16)}`) : ''}
+    </section>
+    <section class="card">
+      <h2>По часам</h2>
+      ${stripHtml(hs, '')}
+      ${rowsHtml(hs, '')}
+      ${LEGEND}
+    </section>`;
+}
+
+function renderWeek(byDay, key, today, tomorrow) {
+  return `
+    <section class="card">
+      <h2>Прогноз на неделю</h2>
+      <p class="hint">Чем дальше день, тем ниже точность. После 3–4 дней это скорее ориентир.</p>
+      ${Object.entries(byDay).map(([d, hs]) => {
+        const s = summarizeDay(hs, d === today ? key : '');
+        return `
+        <div class="day">
+          <div class="day-head">
+            <div class="day-name">${dayTitle(d, today, tomorrow)}</div>
+            <span class="badge ${s.cls}">${s.label}</span>
+          </div>
+          ${stripHtml(hs, key)}
+          <div class="day-text">${s.text}${s.noAq ? ' · <span class="warn">нет прогноза дымки, оценка по облакам</span>' : ''}</div>
+        </div>`;
+      }).join('')}
+      ${LEGEND}
+    </section>`;
+}
+
+function render(hours) {
+  const key = nowKey();
+  const today = key.slice(0, 10);
+  const tomorrow = new Date(Date.parse(today) + 864e5).toISOString().slice(0, 10);
+  const byDay = {};
+  hours.forEach(h => (byDay[h.time.slice(0, 10)] ??= []).push(h));
+
+  document.getElementById('panel-today').innerHTML = renderToday(byDay[today] ?? hours, key, today, tomorrow);
+  document.getElementById('panel-tomorrow').innerHTML = renderTomorrow(byDay[tomorrow], today, tomorrow);
+  document.getElementById('panel-week').innerHTML = renderWeek(byDay, key, today, tomorrow);
+}
+
+// Табы
+const tabs = [...document.querySelectorAll('[role=tab]')];
+function selectTab(name) {
+  tabs.forEach(b => {
+    const on = b.dataset.tab === name;
+    b.setAttribute('aria-selected', on);
+    document.getElementById('panel-' + b.dataset.tab).hidden = !on;
+  });
+}
+tabs.forEach(b => b.addEventListener('click', () => selectTab(b.dataset.tab)));
+
+// Загрузка и обновление
+let loadedAt = 0;
+async function refresh() {
+  const status = document.getElementById('status');
+  try {
+    const data = await load();
+    loadedAt = data.at;
+    render(toHours(data));
+    if (data.stale) {
+      const when = new Date(data.at).toLocaleString('ru-RU', { timeZone: TZ, day: 'numeric', month: 'long',
+        hour: '2-digit', minute: '2-digit' });
+      status.textContent = `Нет сети — показан прогноз от ${when}.`;
+    }
+    status.hidden = !data.stale;
+  } catch (e) {
+    status.hidden = true;
+    document.getElementById('panel-today').innerHTML =
+      `<section class="card"><p class="verdict err">Не удалось загрузить прогноз</p><div class="sub">${e.message}</div></section>`;
+    selectTab('today');
+  }
+}
+refresh();
+// Вернулись в приложение спустя 30+ минут — обновляем прогноз
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && Date.now() - loadedAt > 30 * 60 * 1000) refresh();
+});
+window.addEventListener('online', refresh);
+
+// PWA: офлайн-оболочка и кнопка установки (Chrome/Android; на iOS — «Поделиться → На экран Домой»)
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+let installPrompt = null;
+const installBtn = document.getElementById('install');
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  installPrompt = e;
+  installBtn.hidden = false;
+});
+installBtn.addEventListener('click', async () => {
+  if (!installPrompt) return;
+  installPrompt.prompt();
+  await installPrompt.userChoice;
+  installPrompt = null;
+  installBtn.hidden = true;
+});
+window.addEventListener('appinstalled', () => { installBtn.hidden = true; });
+</script>
+</body>
+</html>
