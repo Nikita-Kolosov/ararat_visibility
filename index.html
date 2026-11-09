@@ -72,8 +72,19 @@
   .yes { color: var(--yes); } .maybe { color: var(--maybe); } .no { color: var(--no); } .night { color: var(--muted); }
   .factors { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-top: 16px; }
   .factor { border-top: 1px solid var(--line); padding-top: 10px; }
-  .factor b { display: block; font-size: 20px; }
-  .factor span { color: var(--muted); font-size: 13px; }
+  .factor > b { display: block; font-size: 20px; }
+  .factor > span { color: var(--muted); font-size: 13px; }
+  .factor { position: relative; }
+  .info { display: inline-grid; place-items: center; width: 16px; height: 16px; margin-left: 5px; padding: 0;
+    border: 1px solid var(--muted); border-radius: 50%; background: transparent; color: var(--muted);
+    font: italic 700 10px/1 Georgia, serif; cursor: pointer; vertical-align: 1px; }
+  .info:hover, .info[aria-expanded="true"] { color: var(--text); border-color: var(--text); }
+  .info:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+  .info::before { content: ''; position: absolute; inset: -8px; }
+  .info { position: relative; }
+  .tip { position: absolute; z-index: 10; top: calc(100% + 6px); left: 0; width: min(280px, calc(100vw - 64px));
+    background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 12px;
+    padding: 12px 14px; font-size: 13px; line-height: 1.5; box-shadow: 0 8px 24px rgba(0,0,0,.18); }
   .factors-cap { font-size: 12px; color: var(--muted); margin-top: 10px; }
   .hint { font-size: 13px; color: var(--muted); margin: -6px 0 14px; }
   .warn { color: var(--maybe); }
@@ -275,12 +286,47 @@ function dayTitle(d, today, tomorrow, withDate = true) {
   return withDate ? `${name}<small>${dm}</small>` : `${name}, ${dm}`;
 }
 
+const AOD_INFO = `
+  <b>Аэрозоли</b> — дымка, пыль и смог в воздухе. Даже в безоблачный день из-за них гора может «растворяться» в мареве.
+  <br><br><b>AOD</b> (аэрозольная оптическая толщина) — насколько они мутят воздух:
+  <br>до 0.12 — воздух прозрачный
+  <br>0.12–0.3 — лёгкая дымка
+  <br>0.3–0.5 — сильная дымка
+  <br>больше 0.5 — гору обычно не видно`;
+
+// Иконка «i» с пояснением по клику (работает и на телефоне, где нет hover)
+let infoSeq = 0;
+function infoHtml(name, html) {
+  const id = `info-${name}-${++infoSeq}`;
+  return `<button class="info" type="button" aria-expanded="false" aria-controls="${id}" aria-label="Что это?">i</button>
+    <div class="tip" id="${id}" role="tooltip" hidden>${html}</div>`;
+}
+function closeTips(except) {
+  document.querySelectorAll('.info[aria-expanded="true"]').forEach(b => {
+    if (b === except) return;
+    b.setAttribute('aria-expanded', 'false');
+    document.getElementById(b.getAttribute('aria-controls')).hidden = true;
+  });
+}
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.info');
+  if (btn) {
+    const open = btn.getAttribute('aria-expanded') !== 'true';
+    closeTips(btn);
+    btn.setAttribute('aria-expanded', open);
+    document.getElementById(btn.getAttribute('aria-controls')).hidden = !open;
+  } else if (!e.target.closest('.tip')) {
+    closeTips();
+  }
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeTips(); });
+
 function factorsHtml(h, caption) {
   return `
     <div class="factors">
       <div class="factor"><b>${fmt(h.summitCloud)}%</b><span>облака у вершины</span></div>
       <div class="factor"><b>${fmt(h.pathCloud)}%</b><span>низкие облака по пути</span></div>
-      <div class="factor"><b>${fmt(h.aod, 2)}</b><span>аэрозоли (AOD)</span></div>
+      <div class="factor"><b>${fmt(h.aod, 2)}</b><span>аэрозоли (AOD)</span>${infoHtml('aod', AOD_INFO)}</div>
       <div class="factor"><b>${h.vis == null ? '—' : (h.vis / 1000).toFixed(0) + ' км'}</b><span>видимость в Ереване</span></div>
     </div>
     ${caption ? `<div class="factors-cap">${caption}</div>` : ''}`;
