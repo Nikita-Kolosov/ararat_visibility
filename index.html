@@ -460,6 +460,15 @@ if (GOATCOUNTER_CODE) {
   // Запуск установленного приложения с рабочего экрана (Android/десктоп и iOS)
   if (matchMedia('(display-mode: standalone)').matches || navigator.standalone)
     track('launch-pwa', 'Запуск установленного приложения');
+  // Один раз с каждого устройства: счётчик first-open = число новых устройств за период.
+  // На сервер уходит только сам факт, без идентификаторов; флаг хранится на устройстве.
+  // На iOS у установленного приложения своё хранилище, отдельное от Safari, — там это два устройства.
+  try {
+    if (!localStorage.getItem('ararat-first-open')) {
+      localStorage.setItem('ararat-first-open', new Date().toISOString());
+      track('first-open', 'Новое устройство');
+    }
+  } catch {}
 }
 
 // Табы
