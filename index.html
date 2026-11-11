@@ -85,6 +85,13 @@
   .tip { position: absolute; z-index: 10; top: calc(100% + 6px); left: 0; width: min(280px, calc(100vw - 64px));
     background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 12px;
     padding: 12px 14px; font-size: 13px; line-height: 1.5; box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+  .obs { display: flex; align-items: center; justify-content: space-between; gap: 10px 14px; flex-wrap: wrap;
+    margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 14px; color: var(--muted); }
+  .obs-btns { display: flex; gap: 8px; }
+  .obs button { border: 1px solid var(--line); background: var(--tab); color: var(--text); font: inherit; font-weight: 600;
+    padding: 7px 14px; border-radius: 10px; cursor: pointer; }
+  .obs button:hover { border-color: var(--muted); }
+  .obs button:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
   .factors-cap { font-size: 12px; color: var(--muted); margin-top: 10px; }
   .hint { font-size: 13px; color: var(--muted); margin: -6px 0 14px; }
   .warn { color: var(--maybe); }
@@ -175,20 +182,57 @@ async function getJson(url) {
 }
 
 const CACHE_KEY = 'ararat-forecast';
+// Модели облачности: они часто сильно расходятся, поэтому усредняем три
+const MODELS = ['icon_seamless', 'ecmwf_ifs025', 'gfs_seamless'];
+// Направление с Еревана на вершину (азимут, градусы от севера)
+const ARARAT_AZIMUTH = 199;
 
 async function fetchForecast() {
   const lats = POINTS.map(p => p.lat).join(','), lons = POINTS.map(p => p.lon).join(',');
   const tz = encodeURIComponent(TZ);
-  const [w, a] = await Promise.all([
+  const [w, m, a] = await Promise.all([
+    // Ереван и общая погода (модель по умолчанию)
     getJson(`https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}` +
       `&hourly=cloud_cover_low,cloud_cover_mid,visibility,relative_humidity_2m,is_day` +
       `&timezone=${tz}&forecast_days=${DAYS}`),
+    // облака и прямое солнце у вершины и по пути — по трём моделям; не загрузилось — обойдёмся одной
+    getJson(`https://api.open-meteo.com/v1/forecast?latitude=${POINTS[0].lat},${POINTS[1].lat}` +
+      `&longitude=${POINTS[0].lon},${POINTS[1].lon}` +
+      `&hourly=cloud_cover_low,cloud_cover_mid,direct_normal_irradiance&models=${MODELS.join(',')}` +
+      `&timezone=${tz}&forecast_days=${DAYS}`).catch(() => null),
     // аэрозоли есть только на ~4–5 дней вперёд; если API недоступен — живём без них
     getJson(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=40.18&longitude=44.51` +
       `&hourly=aerosol_optical_depth&timezone=${tz}&forecast_days=${DAYS}`).catch(() => null),
   ]);
-  return { w, a, at: Date.now() };
+  return { w, m, a, at: Date.now() };
 }
+
+// Положение солнца (упрощённая формула, точности в доли градуса хватает)
+function sunPosition(ms, lat, lon) {
+  const rad = Math.PI / 180, d = ms / 864e5 - 10957.5;
+  const g = (357.529 + 0.98560028 * d) * rad;
+  const q = 280.459 + 0.98564736 * d;
+  const L = (q + 1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g)) * rad;
+  const e = (23.439 - 0.00000036 * d) * rad;
+  const ra = Math.atan2(Math.cos(e) * Math.sin(L), Math.cos(L));
+  const dec = Math.asin(Math.sin(e) * Math.sin(L));
+  const gmst = (18.697374558 + 24.06570982441908 * d) % 24;
+  const ha = (gmst * 15 + lon) * rad - ra;
+  const la = lat * rad;
+  const el = Math.asin(Math.sin(la) * Math.sin(dec) + Math.cos(la) * Math.cos(dec) * Math.cos(ha));
+  const az = Math.atan2(-Math.sin(ha), Math.tan(dec) * Math.cos(la) - Math.sin(la) * Math.cos(ha));
+  return { el: el / rad, az: (az / rad + 360) % 360 };
+}
+
+// Прямая радиация при чистом небе (модель Мейнела), Вт/м²; солнце низко — не оцениваем
+function clearSkyDni(el) {
+  if (el <= 5) return null;
+  const am = 1 / (Math.sin(el * Math.PI / 180) + 0.50572 * Math.pow(el + 6.07995, -1.6364));
+  return 1353 * Math.pow(0.7, Math.pow(am, 0.678));
+}
+
+const timeMs = t => Date.parse(t + ':00+04:00'); // Ереван: UTC+4 круглый год
+const avg = xs => xs.reduce((s, x) => s + x, 0) / xs.length;
 
 // Сеть, а без неё — последний удачный прогноз из localStorage
 async function load() {
@@ -204,17 +248,48 @@ async function load() {
   }
 }
 
-function toHours({ w, a }) {
+// Облачность у вершины по одной модели с поправкой на прозрачность:
+// если прямое солнце у вершины пробивается (DNI близка к чистому небу), облака тонкие и гору не прячут
+function summitCloudOf(low, mid, dni, clear) {
+  const raw = Math.max(mid, low * 0.8);
+  if (clear == null || dni == null) return raw;
+  const transparency = clamp(dni / (clear * 0.9));
+  return raw * (1 - 0.8 * transparency);
+}
+
+function toHours({ w, m, a }) {
   const [summit, path, yerevan] = w.map(x => x.hourly);
   const aodByTime = new Map();
   if (a) a.hourly.time.forEach((t, i) => aodByTime.set(t, a.hourly.aerosol_optical_depth[i]));
+  const [ms, mp] = m ? m.map(x => x.hourly) : [];
 
   return summit.time.map((t, i) => {
+    // радиация в прогнозе — среднее за прошедший час, поэтому солнце берём на его середину
+    const sunMid = sunPosition(timeMs(t) - 30 * 60e3, POINTS[0].lat, POINTS[0].lon);
+    const clear = clearSkyDni(sunMid.el);
+    let summitCloud, pathLow, spread = 0;
+    const perModel = ms ? MODELS.map(k => ({
+      c: ms[`cloud_cover_low_${k}`][i] == null ? null : summitCloudOf(ms[`cloud_cover_low_${k}`][i],
+        ms[`cloud_cover_mid_${k}`][i], ms[`direct_normal_irradiance_${k}`][i], clear),
+      low: mp[`cloud_cover_low_${k}`][i],
+    })).filter(x => x.c != null && x.low != null) : [];
+    if (perModel.length) {
+      const cs = perModel.map(x => x.c);
+      summitCloud = avg(cs);
+      spread = Math.max(...cs) - Math.min(...cs);
+      pathLow = avg(perModel.map(x => x.low));
+    } else {
+      summitCloud = Math.max(summit.cloud_cover_mid[i], summit.cloud_cover_low[i] * 0.8);
+      pathLow = path.cloud_cover_low[i];
+    }
+    const sun = sunPosition(timeMs(t), POINTS[2].lat, POINTS[2].lon);
     const h = {
       time: t,
       day: yerevan.is_day[i] === 1,
-      summitCloud: Math.max(summit.cloud_cover_mid[i], summit.cloud_cover_low[i] * 0.8),
-      pathCloud: Math.max(path.cloud_cover_low[i], yerevan.cloud_cover_low[i]),
+      summitCloud,
+      pathCloud: Math.max(pathLow, yerevan.cloud_cover_low[i]),
+      spread,
+      sun,
       vis: yerevan.visibility[i],
       rh: yerevan.relative_humidity_2m[i],
       aod: aodByTime.get(t) ?? null,
@@ -231,13 +306,20 @@ function score(h) {
   const hazeVis = h.vis == null ? 0 : clamp((20000 - h.vis) / 15000);
   const hazeRh = clamp((h.rh - 75) / 25) * 0.5;
   const haze = Math.max(hazeAod, hazeVis, hazeRh);
-  const p = (1 - clouds) * (1 - haze * 0.85);
+  // Против солнца: солнце светит со стороны горы — она выглядит размыто даже в чистом воздухе
+  let diff = Math.abs(h.sun.az - ARARAT_AZIMUTH) % 360;
+  if (diff > 180) diff = 360 - diff;
+  const backlight = h.sun.el > 0 ? clamp((50 - diff) / 50) : 0;
+  const p = (1 - clouds) * (1 - haze * 0.85) * (1 - 0.25 * backlight);
   let reason;
   if (clouds > 0.6) reason = 'вершина в облаках';
   else if (haze > 0.5) reason = 'сильная дымка';
   else if (clouds > 0.3) reason = 'облака частично закрывают';
   else if (haze > 0.25) reason = 'лёгкая дымка';
   else reason = 'ясно';
+  if (clouds <= 0.6 && backlight > 0.5)
+    reason = reason === 'ясно' ? 'против солнца, контраст слабый' : reason + ', против солнца';
+  if (h.spread > 60) reason += ' · прогнозы расходятся';
   if (p >= 0.6) return { p, cls: 'yes', label: 'Видно', reason };
   if (p >= 0.3) return { p, cls: 'maybe', label: 'Частично', reason };
   return { p, cls: 'no', label: 'Не видно', reason };
@@ -361,6 +443,32 @@ const LEGEND = `
     <span><i style="background:var(--night)"></i>темно</span>
   </div>`;
 
+// Наблюдения «вижу / не вижу» для калибровки: событие obs-<ответ>-pred-<прогноз> в GoatCounter
+// даёт таблицу «что предсказали × что увидели». Один ответ с устройства в час.
+const OBS_KEY = 'ararat-obs';
+function obsHtml(key, cur) {
+  let answered = false;
+  try { answered = localStorage.getItem(OBS_KEY) === key; } catch {}
+  if (answered) return `<div class="obs"><span>Спасибо! Ответ учтён — это поможет точнее считать прогноз.</span></div>`;
+  return `
+    <div class="obs">
+      <span>Вы в Ереване? Видно гору прямо сейчас?</span>
+      <div class="obs-btns">
+        <button type="button" data-obs="yes" data-pred="${cur.cls}" data-key="${key}">Вижу</button>
+        <button type="button" data-obs="no" data-pred="${cur.cls}" data-key="${key}">Не вижу</button>
+      </div>
+    </div>`;
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-obs]');
+  if (!b) return;
+  const seen = b.dataset.obs === 'yes';
+  const predLabel = { yes: 'видно', maybe: 'частично', no: 'не видно' }[b.dataset.pred] || b.dataset.pred;
+  track(`obs-${b.dataset.obs}-pred-${b.dataset.pred}`, `Наблюдение: ${seen ? 'видно' : 'не видно'}; прогноз: ${predLabel}`);
+  try { localStorage.setItem(OBS_KEY, b.dataset.key); } catch {}
+  b.closest('.obs').innerHTML = '<span>Спасибо! Ответ учтён — это поможет точнее считать прогноз.</span>';
+});
+
 function renderToday(hs, key, today, tomorrow) {
   const cur = hs.find(h => h.time === key) ?? hs[0];
   const s = summarizeDay(hs, key);
@@ -374,6 +482,7 @@ function renderToday(hs, key, today, tomorrow) {
       <p class="verdict ${cur.cls}">${cur.label}</p>
       <div class="sub">${sub}</div>
       ${factorsHtml(cur)}
+      ${cur.day ? obsHtml(key, cur) : ''}
     </section>
     <section class="card">
       <h2>По часам</h2>
